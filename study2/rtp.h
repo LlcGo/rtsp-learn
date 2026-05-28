@@ -1,0 +1,58 @@
+#pragma once
+#pragma comment(lib, "ws2_32.lib")
+#include <stdint.h>
+
+#define RTP_VESION
+
+#define RTP_PALYLOAD_TYPE_H264
+#define RTP_PALYLOAD_TYPE_ACC
+
+#define RTP_HEADER_SIZE
+#define RTP_MAX_PKT_SIZE
+
+/*
+  *    0                   1                   2                   3
+  *    7 6 5 4 3 2 1 0|7 6 5 4 3 2 1 0|7 6 5 4 3 2 1 0|7 6 5 4 3 2 1 0
+  *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  *   |V=2|P|X|  CC   |M|     PT      |       sequence number         |
+  *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  *   |                           timestamp                           |
+  *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  *   |           synchronization source (SSRC) identifier            |
+  *   +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+  *   |            contributing source (CSRC) identifiers             |
+  *   :                             ....                              :
+  *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  *
+  */
+
+struct RtpHeader
+{
+	uint8_t csrcLen : 4;
+	uint8_t extension : 1;
+	uint8_t padding : 1;
+	uint8_t version : 2;
+
+	uint8_t payloadType : 7;
+	uint8_t marker : 1;
+	
+	uint16_t seq;
+	
+	uint32_t timestamp;
+
+	uint32_t ssrc;
+};
+
+struct RtpPacket
+{
+	struct RtpHeader rtpHeader;
+	uint8_t payload[0];
+};
+
+void rtpHeaderInit(struct RtpPacket* rtpPacket, uint8_t csrcLen, uint8_t extension,
+	uint8_t padding, uint8_t version, uint8_t payloadType, uint8_t marker,
+	uint16_t seq, uint32_t timestamp, uint32_t ssrc);
+
+int rtpSendPacketOverTcp(int clientSockfd, struct RtpPacket* rtpPacket, uint32_t dataSize);
+int rtpSendPacketOverUdp(int serverRtpSockfd, const char* ip, int16_t port, struct RtpPacket* rtpPacket, uint32_t dataSize);
+
