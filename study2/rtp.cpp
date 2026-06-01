@@ -46,6 +46,23 @@ int rtpSendPacketOverTcp(int clientSockfd, struct RtpPacket* rtpPacket, uint32_t
 
 int rtpSendPacketOverUdp(int serverRtpSockfd, const char* ip, int16_t port, struct RtpPacket* rtpPacket, uint32_t dataSize)
 {
-	
+	struct sockaddr_in addr;
+	int ret;
 
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+	addr.sin_addr.s_addr = inet_addr(ip);
+
+	rtpPacket->rtpHeader.seq = htons(rtpPacket->rtpHeader.seq);
+	rtpPacket->rtpHeader.timestamp = htonl(rtpPacket->rtpHeader.timestamp);
+	rtpPacket->rtpHeader.ssrc = htonl(rtpPacket->rtpHeader.ssrc);
+
+	ret = sendto(serverRtpSockfd, (char*)rtpPacket, dataSize + RTP_HEADER_SIZE, 0,
+		(struct sockaddr*)&addr, sizeof(addr));
+
+	rtpPacket->rtpHeader.seq = ntohs(rtpPacket->rtpHeader.seq);
+	rtpPacket->rtpHeader.timestamp = ntohl(rtpPacket->rtpHeader.timestamp);
+	rtpPacket->rtpHeader.ssrc = ntohl(rtpPacket->rtpHeader.ssrc);
+
+	return ret;
 }
