@@ -2,13 +2,13 @@
 #pragma comment(lib, "ws2_32.lib")
 #include <stdint.h>
 
-#define RTP_VESION
+#define RTP_VESION 2
 
-#define RTP_PALYLOAD_TYPE_H264
-#define RTP_PALYLOAD_TYPE_ACC
+#define RTP_PALYLOAD_TYPE_H264 96
+#define RTP_PALYLOAD_TYPE_ACC 97
 
-#define RTP_HEADER_SIZE
-#define RTP_MAX_PKT_SIZE
+#define RTP_HEADER_SIZE 12
+#define RTP_MAX_PKT_SIZE 1400
 
 /*
   *    0                   1                   2                   3
