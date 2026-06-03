@@ -120,7 +120,31 @@ static char* findNextStartCode(char* buf, int len)
 }
 
 static int getFrameFromH264File(FILE* fp, char* frame, int size) {
-    
+    int rSize, frameSize;
+    char* nextStartCode;
+
+    if (fp < 0)
+    {
+        return -1;
+    }
+
+    rSize = fread(frame, 1, size, fp);
+
+    if (!startCode3(frame) && !startCode4(frame))
+    {
+        return -1;
+    }
+
+    nextStartCode = findNextStartCode(frame + 3,rSize -3);
+    if (!nextStartCode) {
+        return -1;
+    }
+    else
+    {
+        frameSize = (nextStartCode - frame);
+        fseek(fp, frameSize - rSize, SEEK_CUR);
+    }
+    return frameSize;
 }
 
 static int rtpSendH264Frame(int serverRtpSockfd, const char* ip, int16_t port,
