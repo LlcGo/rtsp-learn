@@ -150,7 +150,97 @@ static int getFrameFromH264File(FILE* fp, char* frame, int size) {
 static int rtpSendH264Frame(int serverRtpSockfd, const char* ip, int16_t port,
     struct RtpPacket* rtpPacket, char* frame, uint32_t frameSize)
 {
+    uint8_t naluType;
+    int sendBytes = 0;
+    int ret;
 
+    naluType = frame[0];
+    printf("frameSize=%d \n", frameSize);
+
+    if (frameSize <= RTP_MAX_PKT_SIZE) {
+        //*   0 1 2 3 4 5 6 7 8 9
+         //*  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         //*  |F|NRI|  Type   | a single NAL unit ... |
+         //*  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+        memcpy(rtpPacket->payload, frame, frameSize);
+        ret = rtpSendPacketOverUdp(serverRtpSockfd, ip, port, rtpPacket, frameSize);
+        if (ret < 0)
+            return -1;
+        
+        rtpPacket->rtpHeader.seq++;
+        sendBytes += ret;
+        if ((naluType & 0x1F) == 7 || (naluType & 0x1F) == 8) {
+            goto out;
+        }
+    }
+    else // nalu长度小于最大包场：分片模式
+    {
+        //*  0                   1                   2
+         //*  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+         //* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         //* | FU indicator  |   FU header   |   FU payload   ...  |
+         //* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+
+
+         //*     FU Indicator
+         //*    0 1 2 3 4 5 6 7
+         //*   +-+-+-+-+-+-+-+-+
+         //*   |F|NRI|  Type   |
+         //*   +---------------+
+
+
+
+         //*      FU Header
+         //*    0 1 2 3 4 5 6 7
+         //*   +-+-+-+-+-+-+-+-+
+         //*   |S|E|R|  Type   |
+         //*   +---------------+
+        int pktNum = frameSize / RTP_MAX_PKT_SIZE; // 有几个完整的包
+        int remainPktSize = frameSize % RTP_MAX_PKT_SIZE; // 剩余不完整包的大小
+        int i, post = 1;
+
+        // 发送完整包
+        for (i = 0; i < pktNum; i++)
+        {
+            rtpPacket->payload[0] = (naluType & 0x60) | 28;
+            rtpPacket->payload[1] = naluType & 0x1F;
+
+            if (i == 0)
+                rtpPacket->payload[0] |= 0x80; //start
+            else if (remainPktSize == 0 && i == pktNum - 1)
+                rtpPacket->payload[1] |= 0x40; // end
+
+            memcpy(rtpPacket->payload + 2, frame + post, RTP_MAX_PKT_SIZE);
+            ret = rtpSendPacketOverUdp(serverRtpSockfd, ip, port, rtpPacket, RTP_MAX_PKT_SIZE + 2);
+            if (ret < 0)
+                return -1;
+
+            rtpPacket->rtpHeader.seq++;
+            sendBytes += ret;
+            post += RTP_MAX_PKT_SIZE;
+        }
+
+        // 发送剩余数据
+        if (remainPktSize > 0)
+        {
+            rtpPacket->payload[0] = (naluType & 0x60) | 28;
+            rtpPacket->payload[1] = naluType & 0x1F;
+            rtpPacket->payload[1] |= 0x40;
+
+            memcpy(rtpPacket->payload + 2, frame + post, remainPktSize + 2);
+            ret = rtpSendPacketOverUdp(serverRtpSockfd, ip, port, rtpPacket, remainPktSize + 2);
+            if (ret < 0)
+                return -1;
+
+            rtpPacket->rtpHeader.seq++;
+            sendBytes += ret;
+        }
+    }
+    rtpPacket->rtpHeader.timestamp += 90000 / 25;
+out:
+    return sendBytes;
 
 }
 
