@@ -21,6 +21,47 @@
 #define SERVER_RTCP_PORT 55533
 #define BUF_MAX_SIZE     (1024*1024)
 
+struct AdtsHeader
+{
+    unsigned int syncword; //总是0xFFF,代表一个ADTS帧的开始，作为分界符，用于同步每帧起始位置。
+    uint8_t id; // 一般用0，因为都是属于MPEG的规范。
+    uint8_t layer; //always 0
+    uint8_t protectionAbsent; //这里代表是否有CRC检验字段，1代表没有，0代表有。
+    uint8_t profile; //代表使用哪个级别和规范的AAC，其中01代表Low Complexity(LC),其中profile等于Audio Object Type的值减1，其中所有Audio Object Type值在下面所示。
+    uint8_t samplingfrequencyindex; //采样率下标，由于AAC的采样率范围是8KHz-96KHz，所以具体用那个，这个字段决定。
+    uint8_t privatebit; //一般默认0即可
+    uint8_t channelconfiguration; //通道配置即声道数，一般2表示立体声双声道。具体取值范围参考下表。
+    uint8_t originalitycopy; // 一般默认0即可
+    uint8_t home; // 一般默认0即可
+    uint8_t   copyrightedidentificationbit;// 一般默认0即可
+    uint8_t   copyrightedidentificationStart;// 一般默认0即可
+
+    unsigned int aacFrameLength; //一个ADTS帧的长度包括ADTS头和AAC原始流。用AAC原始流长度+7或者9。当proection_ansent = 0 则+9proection_ansent = 1 则+7
+    unsigned int aDTSBufferFullness; //0x7FF 说明是码率可变的码流。0x000代表是固定码率的码流。
+    
+     /* number_of_raw_data_blocks_in_frame
+     * 表示ADTS帧中有number_of_raw_data_blocks_in_frame + 1个AAC原始帧
+     * 所以说number_of_raw_data_blocks_in_frame == 0
+     * 表示说ADTS帧中有一个AAC数据块并不是说没有。(一个AAC原始帧包含一段时间内1024个采样及相关数据)
+     */
+    uint8_t numberOfRawDataBlockInFrame; //2 bit
+};
+
+static int pareseAdtHeader(uint8_t* in, struct AdtsHeader*res)
+{
+    static int frame_number = 0;
+    memset(res, 0, sizeof(*res));
+
+    if ((in[0] == 0xFF) && ((in[1] & 0xF0) == 0xF0))
+    {
+        res->id = (in[1] & 0x08) >> 3; //第二个字节与0x08与运算之后，获得第13位bit对应的值
+        res->layer = (in[1] & 0x06) >> 1;//第二个字节与0x06与运算之后，右移1位，获得第14,15位两个bit对应的值
+        res->protectionAbsent = in[1]&0x01;
+        res->profile = (in[2] & 0xc0) >> 6;
+
+    }
+}
+
 static int createTcpSocket()
 {
     int sockfd;
