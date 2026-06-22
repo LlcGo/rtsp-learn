@@ -54,11 +54,20 @@ static int pareseAdtHeader(uint8_t* in, struct AdtsHeader*res)
 
     if ((in[0] == 0xFF) && ((in[1] & 0xF0) == 0xF0))
     {
-        res->id = (in[1] & 0x08) >> 3; //第二个字节与0x08与运算之后，获得第13位bit对应的值
-        res->layer = (in[1] & 0x06) >> 1;//第二个字节与0x06与运算之后，右移1位，获得第14,15位两个bit对应的值
-        res->protectionAbsent = in[1]&0x01;
-        res->profile = (in[2] & 0xc0) >> 6;
-
+        res->id = ((uint8_t)in[1] & 0x08) >> 3; //第二个字节与0x08与运算之后，获得第13位bit对应的值
+        res->layer = ((uint8_t)in[1] & 0x06) >> 1;//第二个字节与0x06与运算之后，右移1位，获得第14,15位两个bit对应的值
+        res->protectionAbsent = (uint8_t)in[1]&0x01;
+        res->profile = ((uint8_t)in[2] & 0xc0) >> 6;
+        res->samplingfrequencyindex = ((uint8_t)in[2] & 0x3C) >> 2;
+        res->privatebit = ((uint8_t)in[2] & 0x02) >> 1;
+        res->channelconfiguration = (((uint8_t)in[2] & 0x01) << 2) | (((unsigned int)in[3] & 0xc0) >> 6);
+        res->originalitycopy = (((uint8_t)in[3] & 0x20) >> 5);
+        res->home = (((uint8_t)in[3] & 0x10) >> 4);
+        res->copyrightedidentificationbit = (((uint8_t)in[3] & 0x08) >> 3);
+        res->copyrightedidentificationStart = (((uint8_t)in[3] & 0x04) >> 2);
+        res->aacFrameLength = (((unsigned int)in[3] & 0x03)<<11) | (((unsigned int)in[4] &0xFF)<<3) | ((unsigned int)in[5] & 0xE0) >> 5;
+        res->aDTSBufferFullness = (((unsigned int)in[5] & 0x1f) << 6 | ((unsigned int)in[6] & 0xfc) >> 2);
+        res->numberOfRawDataBlockInFrame = ((uint8_t)in[6] & 0x03);
     }
 }
 
