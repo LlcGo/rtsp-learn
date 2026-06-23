@@ -132,166 +132,34 @@ static int acceptClient(int sockfd, char* ip, int* port)
     return clientfd;
 }
 
+// 校验开头是否位3个bit 001
 static inline int startCode3(char* buf)
 {
-    if (buf[0] == 0 && buf[1] == 0 && buf[2] == 1)
-        return 1;
-    else
-        return 0;
+   
 }
 
+// 校验开始是否为4个bit 0001
 static inline int startCode4(char* buf)
 {
-    if (buf[0] == 0 && buf[1] == 0 && buf[2] == 0 && buf[3] == 1)
-        return 1;
-    else
-        return 0;
+  
 }
 
+// 查找下一个开头帧startCode
 static char* findNextStartCode(char* buf, int len)
 {
-    int i;
-
-    if (len < 3)
-        return NULL;
-
-    for (i = 0; i < len - 3; ++i)
-    {
-        if (startCode3(buf) || startCode4(buf))
-            return buf;
-
-        ++buf;
-    }
-
-    if (startCode3(buf))
-        return buf;
-
-    return NULL;
+   
 }
 
+// 获取H264文件
 static int getFrameFromH264File(FILE* fp, char* frame, int size) {
-    int rSize, frameSize;
-    char* nextStartCode;
-
-    if (fp < 0)
-    {
-        return -1;
-    }
-
-    rSize = fread(frame, 1, size, fp);
-
-    if (!startCode3(frame) && !startCode4(frame))
-    {
-        return -1;
-    }
-
-    nextStartCode = findNextStartCode(frame + 3,rSize -3);
-    if (!nextStartCode) {
-        return -1;
-    }
-    else
-    {
-        frameSize = (nextStartCode - frame);
-        fseek(fp, frameSize - rSize, SEEK_CUR);
-    }
-    return frameSize;
+   
 }
 
+// rtp发送H264
 static int rtpSendH264Frame(int serverRtpSockfd, const char* ip, int16_t port,
     struct RtpPacket* rtpPacket, char* frame, uint32_t frameSize)
 {
-    uint8_t naluType;
-    int sendBytes = 0;
-    int ret;
-
-    naluType = frame[0];
-    printf("frameSize=%d \n", frameSize);
-
-    if (frameSize <= RTP_MAX_PKT_SIZE) {
-        //*   0 1 2 3 4 5 6 7 8 9
-         //*  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-         //*  |F|NRI|  Type   | a single NAL unit ... |
-         //*  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-        memcpy(rtpPacket->payload, frame, frameSize);
-        ret = rtpSendPacketOverUdp(serverRtpSockfd, ip, port, rtpPacket, frameSize);
-        if (ret < 0)
-            return -1;
-        
-        rtpPacket->rtpHeader.seq++;
-        sendBytes += ret;
-        if ((naluType & 0x1F) == 7 || (naluType & 0x1F) == 8) {
-            goto out;
-        }
-    }
-    else // nalu长度小于最大包场：分片模式
-    {
-        //*  0                   1                   2
-         //*  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
-         //* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-         //* | FU indicator  |   FU header   |   FU payload   ...  |
-         //* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-
-
-         //*     FU Indicator
-         //*    0 1 2 3 4 5 6 7
-         //*   +-+-+-+-+-+-+-+-+
-         //*   |F|NRI|  Type   |
-         //*   +---------------+
-
-
-
-         //*      FU Header
-         //*    0 1 2 3 4 5 6 7
-         //*   +-+-+-+-+-+-+-+-+
-         //*   |S|E|R|  Type   |
-         //*   +---------------+
-        int pktNum = frameSize / RTP_MAX_PKT_SIZE; // 有几个完整的包
-        int remainPktSize = frameSize % RTP_MAX_PKT_SIZE; // 剩余不完整包的大小
-        int i, post = 1;
-
-        // 发送完整包
-        for (i = 0; i < pktNum; i++)
-        {
-            rtpPacket->payload[0] = (naluType & 0x60) | 28;
-            rtpPacket->payload[1] = naluType & 0x1F;
-
-            if (i == 0)
-                rtpPacket->payload[0] |= 0x80; //start
-            else if (remainPktSize == 0 && i == pktNum - 1)
-                rtpPacket->payload[1] |= 0x40; // end
-
-            memcpy(rtpPacket->payload + 2, frame + post, RTP_MAX_PKT_SIZE);
-            ret = rtpSendPacketOverUdp(serverRtpSockfd, ip, port, rtpPacket, RTP_MAX_PKT_SIZE + 2);
-            if (ret < 0)
-                return -1;
-
-            rtpPacket->rtpHeader.seq++;
-            sendBytes += ret;
-            post += RTP_MAX_PKT_SIZE;
-        }
-
-        // 发送剩余数据
-        if (remainPktSize > 0)
-        {
-            rtpPacket->payload[0] = (naluType & 0x60) | 28;
-            rtpPacket->payload[1] = naluType & 0x1F;
-            rtpPacket->payload[1] |= 0x40;
-
-            memcpy(rtpPacket->payload + 2, frame + post, remainPktSize + 2);
-            ret = rtpSendPacketOverUdp(serverRtpSockfd, ip, port, rtpPacket, remainPktSize + 2);
-            if (ret < 0)
-                return -1;
-
-            rtpPacket->rtpHeader.seq++;
-            sendBytes += ret;
-        }
-    }
-    rtpPacket->rtpHeader.timestamp += 90000 / 25;
-out:
-    return sendBytes;
-
+   
 }
 
 
@@ -477,46 +345,7 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
 
         //开始播放，发送RTP包
         if (!strcmp(method, "PLAY")) {
-
-            int frameSize, startCode;
-            char* frame = (char*)malloc(500000);
-            struct RtpPacket* rtpPacket = (struct RtpPacket*)malloc(500000);
-            FILE* fp = fopen(H264_FILE_NAME, "rb");
-            if (!fp)
-            {
-                printf("读取 %s 失败\n", H264_FILE_NAME);
-                break;
-            }
-            
-            rtpHeaderInit(rtpPacket, 0, 0, 0, RTP_VESION, RTP_PALYLOAD_TYPE_H264, 0, 0, 0, 0x88923423);
-            printf("start play\n");
-            printf("client ip:%s\n", clientIP);
-            printf("client port:%d\n", clientRtpPort);
-
-            while (true)
-            {
-                frameSize = getFrameFromH264File(fp, frame, 500000);
-                if (frameSize < 0)
-                {
-                    printf("读取%s结束,frameSize=%d \n", H264_FILE_NAME, frameSize);
-                    break;
-                }
-
-                if (startCode3(frame)) {
-                    startCode = 3;
-                }
-                else {
-                    startCode = 4;
-                }
-
-                frameSize -= startCode;
-                rtpSendH264Frame(serverRtpSockfd, clientIP, clientRtpPort, rtpPacket, frame + startCode, frameSize);
-
-                Sleep(40);
-            }
-            free(frame);
-            free(rtpPacket);
-            break;
+           
         }
 
         memset(method, 0, sizeof(method) / sizeof(char));
