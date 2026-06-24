@@ -345,6 +345,14 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
 
         //开始播放，发送RTP包
         if (!strcmp(method, "PLAY")) {
+
+            // rtp包资源
+            FILE *file = fopen(H264_FILE_NAME, "w+");
+
+            struct RtpPacket *rtpPack = (struct RtpPacket*)malloc(50000);
+            // rtp头初始化
+            rtpHeaderInit(rtpPack, 0, 0, 0, RTP_VESION, RTP_PALYLOAD_TYPE_H264, 0, 0, 0, 0x88923423);
+
            
         }
 
