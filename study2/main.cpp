@@ -150,6 +150,7 @@ static char* findNextStartCode(char* buf, int len)
    
 }
 
+// 第一次读500000 进去一个帧，帧用char*表示
 // 获取H264文件
 static int getFrameFromH264File(FILE* fp, char* frame, int size) {
    
@@ -349,10 +350,19 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
             // rtp包资源
             FILE *file = fopen(H264_FILE_NAME, "w+");
 
-            struct RtpPacket *rtpPack = (struct RtpPacket*)malloc(50000);
+            struct RtpPacket *rtpPack = (struct RtpPacket*)malloc(500000);
             // rtp头初始化
             rtpHeaderInit(rtpPack, 0, 0, 0, RTP_VESION, RTP_PALYLOAD_TYPE_H264, 0, 0, 0, 0x88923423);
 
+            char* frame = (char*)malloc(500000);
+            int size;
+            // 发送
+            while (true)
+            {
+                //读取fp内的帧
+                getFrameFromH264File(file, frame, 500000);
+
+            }
            
         }
 
