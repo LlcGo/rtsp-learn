@@ -153,7 +153,7 @@ static char* findNextStartCode(char* buf, int len)
 // 第一次读500000 进去一个帧，帧用char*表示
 // 获取H264文件
 static int getFrameFromH264File(FILE* fp, char* frame, int size) {
-   
+    size_t rSize = fread(frame, 1, size, fp);
 }
 
 // rtp发送H264
