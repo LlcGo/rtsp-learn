@@ -135,25 +135,77 @@ static int acceptClient(int sockfd, char* ip, int* port)
 // 校验开头是否位3个bit 001
 static inline int startCode3(char* buf)
 {
-   
+    if (buf[0] == 0 && buf[1] == 0 && buf[2] == 1)
+    {
+        return 1;
+    }
+    return 0;
 }
 
 // 校验开始是否为4个bit 0001
 static inline int startCode4(char* buf)
 {
-  
+    if (buf[0] == 0 && buf[1] == 0 && buf[2] == 0 && buf[3] == 1)
+    {
+        return 1;
+    }
+    return 0;
 }
 
 // 查找下一个开头帧startCode
 static char* findNextStartCode(char* buf, int len)
 {
+    int i;
+    
+    if (len < 3)
+    {
+        return NULL;
+    }
+
+    for (i = 0; i < len - 3; i++)
+    {
+        if (startCode3(buf) || startCode4(buf))
+        {
+            return buf;
+        }
+        buf++;
+    }
+
+    // 最后三位为startCode
+    if (startCode3(buf))
+    {
+        return buf;
+    }
    
+    return NULL;
 }
 
 // 第一次读500000 进去一个帧，帧用char*表示
 // 获取H264文件
 static int getFrameFromH264File(FILE* fp, char* frame, int size) {
+    int frameSize;
+    char* nextstartCode;
     size_t rSize = fread(frame, 1, size, fp);
+    
+    // 非帧
+    if (!startCode3(frame) && !startCode4(frame))
+    {
+        return -1;
+    }
+
+    // 查找下一个帧的长度 目的:确认这个整个帧的长度
+    nextstartCode = findNextStartCode(frame + 3, rSize - 3);
+    if (!nextstartCode)
+    {
+
+    }
+    else
+    {
+        frameSize = (nextstartCode - frame);
+        fseek(fp, rSize - frameSize, SEEK_CUR);
+    }
+
+    return frameSize;
 }
 
 // rtp发送H264
