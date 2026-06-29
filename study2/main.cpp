@@ -212,7 +212,28 @@ static int getFrameFromH264File(FILE* fp, char* frame, int size) {
 static int rtpSendH264Frame(int serverRtpSockfd, const char* ip, int16_t port,
     struct RtpPacket* rtpPacket, char* frame, uint32_t frameSize)
 {
-   
+    int sendByte,ret;
+    uint8_t stF = frame[0];
+   // 如果是长度小于RTP_MAX_PKT_SIZE就是单包
+    if (frameSize < RTP_MAX_PKT_SIZE)
+    {
+        memcpy(rtpPacket->payload, frame, sizeof(frame));
+        ret = rtpSendPacketOverTcp(serverRtpSockfd, rtpPacket, frameSize);
+        if (ret < 0)
+            return -1;
+        rtpPacket->rtpHeader.seq++;
+        sendByte += ret;
+
+        if ((stF & 0x1F) == 7 || (stF & 0x1F)==8)
+        {
+            goto out;
+        }
+    }
+out:
+
+    // 实际发送的字节数
+    return sendByte;
+
 }
 
 
@@ -407,12 +428,27 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
             rtpHeaderInit(rtpPack, 0, 0, 0, RTP_VESION, RTP_PALYLOAD_TYPE_H264, 0, 0, 0, 0x88923423);
 
             char* frame = (char*)malloc(500000);
-            int size;
+            int size,frameSize;
             // 发送
             while (true)
             {
-                //读取fp内的帧
-                getFrameFromH264File(file, frame, 500000);
+                //读取fp内的帧长度
+                frameSize =getFrameFromH264File(file, frame, 500000);
+
+                if (frameSize < 0)
+                {
+                    printf("读取完毕");
+                }
+
+                int startCode;
+                if (startCode3(frame))
+                    startCode = 3;
+                else
+                    startCode = 4;
+
+                frameSize = frameSize - startCode;
+                // 发送帧
+                rtpSendH264Frame(serverRtpSockfd, clientIP, clientRtpPort, rtpPack, frame+ startCode, frameSize);
 
             }
            
