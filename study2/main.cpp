@@ -229,6 +229,51 @@ static int rtpSendH264Frame(int serverRtpSockfd, const char* ip, int16_t port,
             goto out;
         }
     }
+    else
+    {
+         //*  0                   1                   2
+         //*  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
+         //* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         //* | FU indicator  |   FU header   |   FU payload   ...  |
+         //* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+         //*     FU Indicator
+         //*    0 1 2 3 4 5 6 7
+         //*   +-+-+-+-+-+-+-+-+
+         //*   |F|NRI|  Type   |
+         //*   +---------------+
+
+         //*      FU Header
+         //*    0 1 2 3 4 5 6 7
+         //*   +-+-+-+-+-+-+-+-+
+         //*   |S|E|R|  Type   |
+         //*   +---------------+
+     
+        // 分片发送
+        // 有几个完整包
+        int total = frameSize / RTP_MAX_PKT_SIZE;
+
+        // 剩下的包有多少长度
+        int end = frameSize % RTP_MAX_PKT_SIZE;
+
+        for (int i = 0; i < total; i++)
+        {
+            rtpPacket->payload[0] = (frame[0] & 0x60) | 28;
+            rtpPacket->payload[0] = frame[0] | 0x1F;
+
+            if (i == 0) {
+                rtpPacket->payload[1] |= 0x80; // start 
+            }
+            else if (i==total - 1 && end == 0)
+            {
+                rtpPacket->payload[1] &= 0x40; // end
+            }
+            ret = rtpSendPacketOverTcp(serverRtpSockfd, rtpPacket, frameSize);
+        }
+
+
+    }
+
 out:
 
     // 实际发送的字节数
