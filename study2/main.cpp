@@ -269,11 +269,12 @@ static int rtpSendH264Frame(int serverRtpSockfd, const char* ip, int16_t port,
                 rtpPacket->payload[1] &= 0x40; // end
             }
             ret = rtpSendPacketOverTcp(serverRtpSockfd, rtpPacket, frameSize);
+
+            rtpPacket->rtpHeader.seq++;
+            sendByte += ret;
         }
-
-
     }
-
+    rtpPacket->rtpHeader.seq++;
 out:
 
     // 实际发送的字节数
@@ -493,16 +494,17 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
 
                 frameSize = frameSize - startCode;
                 // 发送帧
-                rtpSendH264Frame(serverRtpSockfd, clientIP, clientRtpPort, rtpPack, frame+ startCode, frameSize);
+                int sendByte = rtpSendH264Frame(serverRtpSockfd, clientIP, clientRtpPort, rtpPack, frame + startCode, frameSize);
 
+                Sleep(40);
             }
-           
+            free(frame);
+            free(rtpPack);
         }
 
         memset(method, 0, sizeof(method) / sizeof(char));
         memset(url, 0, sizeof(url) / sizeof(char));
         CSeq = 0;
-
     }
 
     closesocket(clientSockfd);
@@ -515,7 +517,6 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
 
     free(rBuf);
     free(sBuf);
-
 }
 
 
