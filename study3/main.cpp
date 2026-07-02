@@ -328,6 +328,26 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
         //开始播放，发送RTP包
         if (!strcmp(method, "PLAY")) {
 
+            // 定义头部 和 rtp 包
+            struct AdtsHeader adtHeader;
+            struct RtpPacket *rtpPacket;
+            uint8_t* frame;
+
+            // 读取AAC文件
+            FILE* fp = fopen(AAC_FILE_NAME, "rb");
+
+            rtpPacket = (struct RtpPacket*)malloc(5000);
+            frame = (uint8_t*)malloc(5000);
+            // 初始化rtp头
+            rtpHeaderInit(rtpPacket, 0, 0, 0, RTP_VESION, RTP_PAYLOAD_TYPE_AAC, 1, 0, 0, 0x32411);
+            
+            while (true)
+            {  
+                int ret =fread(frame, 1, 7, fp);
+
+            }
+
+
         }
     }
 }
