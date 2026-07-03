@@ -123,7 +123,24 @@ static int parseAdtsHeader(uint8_t* in, struct AdtsHeader* res) {
 static int rtpSendAACFrame(int socket, const char* ip, int16_t port,
     struct RtpPacket* rtpPacket, uint8_t* frame, uint32_t frameSize) {
     //打包文档：https://blog.csdn.net/yangguoyu8023/article/details/106517251/
-    
+    int ret;
+    rtpPacket->payload[0] = 0x00;
+    rtpPacket->payload[1] = 0x10;
+    rtpPacket->payload[2] = (frameSize & 0x1FE0) >> 5; // 高8位
+    rtpPacket->payload[3] = (frameSize & 0x1F) << 3; //低5位
+
+    memcpy(rtpPacket->payload + 4, frame, frameSize);
+
+    ret = rtpSendPacketOverUdp(socket, ip, port, rtpPacket, frameSize + 4);
+    if (ret < 0)
+    {
+        printf("failed to send rtp packet\n");
+        return -1;
+    }
+
+    rtpPacket->rtpHeader.seq++;
+    rtpPacket->rtpHeader.timestamp += 1025;
+
     return 0;
 }
 
@@ -329,7 +346,7 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
         if (!strcmp(method, "PLAY")) {
 
             // 定义头部 和 rtp 包
-            struct AdtsHeader adtHeader;
+            struct AdtsHeader *adtHeader;
             struct RtpPacket *rtpPacket;
             uint8_t* frame;
 
@@ -344,12 +361,47 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
             while (true)
             {  
                 int ret =fread(frame, 1, 7, fp);
+                // 解析头
 
+                if (0 < parseAdtsHeader(frame, adtHeader))
+                {
+                    printf("解析异常");
+                }
+
+                // 读取后面几位
+                ret = fread(frame, 1, adtHeader->aacFrameLength-7, fp);
+
+                // 发送AAC
+                rtpSendAACFrame(clientSockfd, clientIP, clientRtpPort, rtpPacket, frame, adtHeader->aacFrameLength - 7);
+
+                Sleep(1);
+                //usleep(23223);//1000/43.06 * 1000
             }
-
-
+            // 释放资源
+            fclose(fp);
+            free(rtpPacket);
+            free(frame);
+            break;
         }
+
+        memset(method, 0, sizeof(method));
+        memset(url, 0, sizeof(url));
+        CSeq = 0;
     }
+
+    // 关闭socket连接
+    closesocket(clientSockfd);
+    if (serverRtpSockfd) {
+        closesocket(serverRtpSockfd);
+    }
+
+    if (serverRtcpSockfd) {
+        closesocket(serverRtcpSockfd);
+    }
+
+    // 释放buf
+    free(rBuf);
+    free(sBuf);
 }
 
 int main() {
