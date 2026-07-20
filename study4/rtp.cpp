@@ -31,6 +31,7 @@ int rtpSendPacketOverTcp(int sokcet, struct RtpPacket* packet, uint32_t dataSize
     Temp[1] = channel;
     Temp[2] = (uint8_t)(((rtpSize) & 0xFF00) >> 8); 
     Temp[3] = (uint8_t)((rtpSize) & 0xFF);
+    memcpy(Temp+4, (char*)packet, rtpSize);
 
     int ret = send(sokcet, Temp, 4 + rtpSize, 0);
 
