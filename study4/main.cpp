@@ -507,8 +507,65 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
 
 		//开始播放，发送RTP包
 		if (!strcmp(method, "PLAY")) {
+			std::thread t1([&] {
 
+			    struct RtpPacket * rtpPacket = (struct RtpPacket*)malloc(50000);
+				FILE * fp = fopen(H264_FILE_NAME, "rb");
+				rtpHeaderInit(rtpPacket, 0, 0, 0, RTP_VESION, RTP_PAYLOAD_TYPE_H264, 0, 0, 0, 0x88923423);
+
+
+				char* frame = (char*)malloc(50000);
+				while (true)
+				{
+					// 播放
+					int frameSize =getFrameFromH264File(fp, frame, 50000);
+					int startCode = 0;
+
+					if (startCode3(frame) == 3){
+						startCode = 3;
+					}else{
+						startCode = 4;
+					}
+
+					rtpSendH264Frame(clientSockfd, rtpPacket, frame + startCode, frameSize);
+
+					rtpPacket->rtpHeader.timestamp += 90000 / 25;
+
+					Sleep(20);
+				}
+				free(frame);
+				free(rtpPacket);
+
+			});
 		
+			std::thread t2([&] {
+				struct AdtsHeader adtsHeader;
+				struct RtpPacket *rtpPacket = (struct RtpPacket*)malloc(50000);
+				rtpHeaderInit(rtpPacket, 0, 0, 0, RTP_VESION, RTP_PAYLOAD_TYPE_AAC, 1, 0, 0, 0x32411);
+				FILE* fp = fopen(AAC_FILE_NAME, "rb");
+
+				uint8_t* frame= (uint8_t*)malloc(50000);
+				int ret;
+				while (true)
+				{
+					fread(frame, 1, 7, fp);
+
+					parseAdtsHeader(frame, &adtsHeader);
+
+					ret = fread(frame, 1, adtsHeader.aacFrameLength - 7, fp);
+
+					rtpSendAACFrame(clientSockfd, rtpPacket, frame, adtsHeader.aacFrameLength - 7);
+
+					Sleep(23);
+				}
+
+				free(frame);
+				free(rtpPacket);
+
+			});
+
+			t1.join();
+			t2.join();
 			break;
 		}
 
