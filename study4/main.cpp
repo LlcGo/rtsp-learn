@@ -110,31 +110,7 @@ static char* findNextStartCode(char* buf, int len)
 }
 
 static int getFrameFromH264File(FILE* fp, char* frame, int size) {
-	int rSize, frameSize;
-	char* nextStartCode;
-
-	if (fp < 0)
-		return -1;
-
-	rSize = fread(frame, 1, size, fp);
-
-	if (!startCode3(frame) && !startCode4(frame))
-		return -1;
-
-	nextStartCode = findNextStartCode(frame + 3, rSize - 3);
-	if (!nextStartCode)
-	{
-		//lseek(fd, 0, SEEK_SET);
-		//frameSize = rSize;
-		return -1;
-	}
-	else
-	{
-		frameSize = (nextStartCode - frame);
-		fseek(fp, frameSize - rSize, SEEK_CUR);
-	}
-
-	return frameSize;
+	
 }
 
 struct AdtsHeader {
@@ -201,35 +177,7 @@ static int parseAdtsHeader(uint8_t* in, struct AdtsHeader* res) {
 
 static int rtpSendAACFrame(int clientSockfd,
 	struct RtpPacket* rtpPacket, uint8_t* frame, uint32_t frameSize) {
-	int ret;
-
-	rtpPacket->payload[0] = 0x00;
-	rtpPacket->payload[1] = 0x10;
-	rtpPacket->payload[2] = (frameSize & 0x1FE0) >> 5; //高8位
-	rtpPacket->payload[3] = (frameSize & 0x1F) << 3; //低5位
-
-	memcpy(rtpPacket->payload + 4, frame, frameSize);
-
-
-	ret = rtpSendPacketOverTcp(clientSockfd, rtpPacket, frameSize + 4, 0x02);
-
-	if (ret < 0)
-	{
-		printf("failed to send rtp packet\n");
-		return -1;
-	}
-
-	rtpPacket->rtpHeader.seq++;
-
-	/*
-	 * 如果采样频率是44100
-	 * 一般AAC每个1024个采样为一帧
-	 * 所以一秒就有 44100 / 1024 = 43帧
-	 * 时间增量就是 44100 / 43 = 1025
-	 * 一帧的时间为 1 / 43 = 23ms
-	 */
-	rtpPacket->rtpHeader.timestamp += 1025;
-
+	
 	return 0;
 }
 
@@ -237,106 +185,7 @@ static int rtpSendH264Frame(int clientSockfd,
 	struct RtpPacket* rtpPacket, char* frame, uint32_t frameSize)
 {
 
-	uint8_t naluType; // nalu第一个字节
-	int sendByte = 0;
-	int ret;
-
-	naluType = frame[0];
-
-	printf("%s frameSize=%d \n", __FUNCTION__, frameSize);
-
-	if (frameSize <= RTP_MAX_PKT_SIZE) // nalu长度小于最大包场：单一NALU单元模式
-	{
-
-		//*   0 1 2 3 4 5 6 7 8 9
-		//*  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-		//*  |F|NRI|  Type   | a single NAL unit ... |
-		//*  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-		memcpy(rtpPacket->payload, frame, frameSize);
-		ret = rtpSendPacketOverTcp(clientSockfd, rtpPacket, frameSize, 0x00);
-		if (ret < 0)
-			return -1;
-
-		rtpPacket->rtpHeader.seq++;
-		sendByte += ret;
-		if ((naluType & 0x1F) == 7 || (naluType & 0x1F) == 8) // 如果是SPS、PPS就不需要加时间戳
-		{
-
-		}
-
-	}
-	else // nalu长度小于最大包：分片模式
-	{
-
-		//*  0                   1                   2
-		//*  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
-		//* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-		//* | FU indicator  |   FU header   |   FU payload   ...  |
-		//* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-
-
-		//*     FU Indicator
-		//*    0 1 2 3 4 5 6 7
-		//*   +-+-+-+-+-+-+-+-+
-		//*   |F|NRI|  Type   |
-		//*   +---------------+
-
-
-
-		//*      FU Header
-		//*    0 1 2 3 4 5 6 7
-		//*   +-+-+-+-+-+-+-+-+
-		//*   |S|E|R|  Type   |
-		//*   +---------------+
-
-
-		int pktNum = frameSize / RTP_MAX_PKT_SIZE;       // 有几个完整的包
-		int remainPktSize = frameSize % RTP_MAX_PKT_SIZE; // 剩余不完整包的大小
-		int i, pos = 1;
-
-		// 发送完整的包
-		for (i = 0; i < pktNum; i++)
-		{
-			rtpPacket->payload[0] = (naluType & 0x60) | 28;
-			rtpPacket->payload[1] = naluType & 0x1F;
-
-			if (i == 0) //第一包数据
-				rtpPacket->payload[1] |= 0x80; // start
-			else if (remainPktSize == 0 && i == pktNum - 1) //最后一包数据
-				rtpPacket->payload[1] |= 0x40; // end
-
-			memcpy(rtpPacket->payload + 2, frame + pos, RTP_MAX_PKT_SIZE);
-			ret = rtpSendPacketOverTcp(clientSockfd, rtpPacket, RTP_MAX_PKT_SIZE + 2, 0x00);
-			if (ret < 0)
-				return -1;
-
-			rtpPacket->rtpHeader.seq++;
-			sendByte += ret;
-			pos += RTP_MAX_PKT_SIZE;
-		}
-
-		// 发送剩余的数据
-		if (remainPktSize > 0)
-		{
-			rtpPacket->payload[0] = (naluType & 0x60) | 28;
-			rtpPacket->payload[1] = naluType & 0x1F;
-			rtpPacket->payload[1] |= 0x40; //end
-
-			memcpy(rtpPacket->payload + 2, frame + pos, remainPktSize + 2);
-			ret = rtpSendPacketOverTcp(clientSockfd, rtpPacket, remainPktSize + 2, 0x00);
-			if (ret < 0)
-				return -1;
-
-			rtpPacket->rtpHeader.seq++;
-			sendByte += ret;
-		}
-	}
-
-
-	return sendByte;
-
+	return 0;
 }
 
 static int handleCmd_OPTIONS(char* result, int seq)
@@ -508,59 +357,62 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
 		//开始播放，发送RTP包
 		if (!strcmp(method, "PLAY")) {
 			std::thread t1([&] {
-
-			    struct RtpPacket * rtpPacket = (struct RtpPacket*)malloc(50000);
-				FILE * fp = fopen(H264_FILE_NAME, "rb");
-				rtpHeaderInit(rtpPacket, 0, 0, 0, RTP_VESION, RTP_PAYLOAD_TYPE_H264, 0, 0, 0, 0x88923423);
-
-
+				// 封装rtp
+				struct RtpPacket* rtpPacket = (struct RtpPacket*)malloc(50000);
+				rtpHeaderInit(rtpPacket, 0, 0, 0, RTP_VESION, RTP_PAYLOAD_TYPE_H264, 0, 0, 0, 0x121313);
+				
+				// 读取h264文件
+				FILE* fp = fopen(H264_FILE_NAME, "rb");
+				
+				// 解析h264
 				char* frame = (char*)malloc(50000);
 				while (true)
 				{
-					// 播放
-					int frameSize =getFrameFromH264File(fp, frame, 50000);
+					int frameSize = getFrameFromH264File(fp, frame, 50000);
 					int startCode = 0;
-
-					if (startCode3(frame) == 3){
+					if (startCode3(frame))
+					{
 						startCode = 3;
-					}else{
+					}
+					else
+					{
 						startCode = 4;
 					}
 
+					// 发送通过rtph264
 					rtpSendH264Frame(clientSockfd, rtpPacket, frame + startCode, frameSize);
-
+					
 					rtpPacket->rtpHeader.timestamp += 90000 / 25;
 
 					Sleep(20);
 				}
 				free(frame);
 				free(rtpPacket);
-
+				
 			});
 		
 			std::thread t2([&] {
-				struct AdtsHeader adtsHeader;
-				struct RtpPacket *rtpPacket = (struct RtpPacket*)malloc(50000);
-				rtpHeaderInit(rtpPacket, 0, 0, 0, RTP_VESION, RTP_PAYLOAD_TYPE_AAC, 1, 0, 0, 0x32411);
-				FILE* fp = fopen(AAC_FILE_NAME, "rb");
+				struct AdtsHeader adtHeader;
+				// 构建rtp包
+				struct RtpPacket* rtpPakcet = (struct RtpPacket*)malloc(5000);
+				rtpHeaderInit(rtpPakcet, 0, 0, 0, RTP_VESION, RTP_PAYLOAD_TYPE_AAC, 1, 0, 0, 0x123);
 
-				uint8_t* frame= (uint8_t*)malloc(50000);
-				int ret;
+				// 读取acc文件
+				FILE*fp = fopen(AAC_FILE_NAME, "rb");
+				uint8_t*frame = (uint8_t*)malloc(50000);
 				while (true)
 				{
+					// 解析acc头
 					fread(frame, 1, 7, fp);
+					parseAdtsHeader(frame, &adtHeader);
 
-					parseAdtsHeader(frame, &adtsHeader);
+					// 发送acc音频
+					rtpSendAACFrame(clientSockfd, rtpPakcet, frame, adtHeader.aacFrameLength - 7);
 
-					ret = fread(frame, 1, adtsHeader.aacFrameLength - 7, fp);
-
-					rtpSendAACFrame(clientSockfd, rtpPacket, frame, adtsHeader.aacFrameLength - 7);
-
-					Sleep(23);
+					Sleep(30);
 				}
-
+				free(rtpPakcet);
 				free(frame);
-				free(rtpPacket);
 
 			});
 
@@ -584,54 +436,6 @@ static void doClient(int clientSockfd, const char* clientIP, int clientPort) {
 
 int main(int argc, char* argv[])
 {
-	WSADATA wsaData;
-	//启动socket
-	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
-	{
-		printf("PC Server Socket Start Up Error \n");
-		return -1;
-	}
-
-	int serverSockfd;
-	serverSockfd = createTcpSocket();
-	if (serverSockfd < 0)
-	{
-		WSACleanup();
-		printf("failed to create tcp socket\n");
-		return -1;
-	}
-
-	if (bindSocketAddr(serverSockfd, "0.0.0.0", SERVER_PORT) < 0)
-	{
-		printf("failed to bind addr\n");
-		return -1;
-	}
-
-	if (listen(serverSockfd, 10) < 0)
-	{
-		printf("failed to listen\n");
-		return -1;
-	}
-
-	printf("%s rtsp://127.0.0.1:%d\n", __FILE__, SERVER_PORT);
-
-	while (true) {
-		int clientSockfd;
-		char clientIp[40];
-		int clientPort;
-
-		clientSockfd = acceptClient(serverSockfd, clientIp, &clientPort);
-		if (clientSockfd < 0)
-		{
-			printf("failed to accept client\n");
-			return -1;
-		}
-
-		printf("accept client;client ip:%s,client port:%d\n", clientIp, clientPort);
-
-		doClient(clientSockfd, clientIp, clientPort);
-	}
-	closesocket(serverSockfd);
-	WSACleanup();
+	
 	return 0;
 }
