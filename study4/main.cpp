@@ -178,6 +178,19 @@ static int parseAdtsHeader(uint8_t* in, struct AdtsHeader* res) {
 static int rtpSendAACFrame(int clientSockfd,
 	struct RtpPacket* rtpPacket, uint8_t* frame, uint32_t frameSize) {
 	
+	rtpPacket->payload[0] = 0x00;
+	rtpPacket->payload[1] = 0x10;
+	rtpPacket->payload[2] = (frameSize >> 5) & 0xFF;
+	rtpPacket->payload[3] = (frameSize & 0x1F) << 3;
+
+	memcpy(rtpPacket->payload+4, frame, frameSize);
+
+	rtpSendPacketOverTcp(clientSockfd, rtpPacket, frameSize + 4, 0x02);
+
+	rtpPacket->rtpHeader.seq++;
+
+	rtpPacket->rtpHeader.timestamp += 1025;
+
 	return 0;
 }
 
