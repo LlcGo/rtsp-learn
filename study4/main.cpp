@@ -110,7 +110,27 @@ static char* findNextStartCode(char* buf, int len)
 }
 
 static int getFrameFromH264File(FILE* fp, char* frame, int size) {
+	int frameSize;
+
+	int rSize = fread(frame, 1, size, fp);
+
+	if (startCode3(frame) || startCode4(frame))
+	{
+		return -1;
+	}
+
+	char* next = findNextStartCode(frame + 3, rSize - 3);
+	if (!next)
+	{
+		return -1;
+	}
+	else
+	{
+		frameSize = (next - frame);
+		fseek(fp, (frameSize - rSize), SEEK_CUR);
+	}
 	
+	return frameSize;
 }
 
 struct AdtsHeader {
